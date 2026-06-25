@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
   ApiClient._internal();
 
+  final _storage = const FlutterSecureStorage();
   String? _accessToken;
   String? _refreshToken;
 
@@ -17,17 +19,28 @@ class ApiClient {
         if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
       };
 
-  void setTokens({required String accessToken, required String refreshToken}) {
+  bool get isAuthenticated => _accessToken != null;
+
+  String? get accessToken => _accessToken;
+
+  Future<void> init() async {
+    _accessToken = await _storage.read(key: 'access_token');
+    _refreshToken = await _storage.read(key: 'refresh_token');
+  }
+
+  Future<void> setTokens({required String accessToken, required String refreshToken}) async {
     _accessToken = accessToken;
     _refreshToken = refreshToken;
+    await _storage.write(key: 'access_token', value: accessToken);
+    await _storage.write(key: 'refresh_token', value: refreshToken);
   }
 
-  void clearTokens() {
+  Future<void> clearTokens() async {
     _accessToken = null;
     _refreshToken = null;
+    await _storage.delete(key: 'access_token');
+    await _storage.delete(key: 'refresh_token');
   }
-
-  bool get isAuthenticated => _accessToken != null;
 
   Future<dynamic> get(String path) async {
     final response = await http.get(

@@ -136,12 +136,22 @@ class SettingsScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Excluir conta?'),
-        content: const Text('Esta ação é irreversível. Todos os seus dados serão permanentemente removidos.'),
+        content: const Text('Esta ação é irreversível. Todos os seus dados serão permanentemente removidos, incluindo perfil, interesses, mensagens, participações em salas e eventos.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+            onPressed: () async {
+              Navigator.pop(context);
+              final auth = context.read<ap.AuthProvider>();
+              await auth.deleteAccount();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (_) => false,
+                );
+              }
+            },
+            child: const Text('Excluir permanentemente', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

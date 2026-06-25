@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../core/api/api_client.dart';
 
 enum NotificationType { event, friend, recommendation, social, seasonal }
@@ -76,12 +78,76 @@ class AppNotification {
   }
 }
 
+@pragma('vm:entry-point')
+Future<void> _onBackgroundMessage(RemoteMessage message) async {}
+
 class NotificationService extends ChangeNotifier {
   final ApiClient _api = ApiClient();
   final List<AppNotification> _notifications = [];
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
+
+  Future<void> init() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    await _localNotifications.initialize(initSettings);
+
+    await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    final token = await _messaging.getToken();
+    if (token != null) {
+      await _registerDeviceToken(token);
+    }
+
+    _messaging.onTokenRefresh.listen(_registerDeviceToken);
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
+  }
+
+  Future<void> _registerDeviceToken(String token) async {
+    try {
+      await _api.post('/api/notifications/register', body: {'token': token});
+    } catch (_) {}
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    final notification = message.notification;
+    if (notification == null) return;
+
+    _showLocalNotification(
+      id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title: notification.title ?? '',
+      body: notification.body ?? '',
+    );
+
+    _notifications.insert(0, AppNotification(
+      id: message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: notification.title ?? '',
+      body: notification.body ?? '',
+      type: NotificationType.social,
+      timestamp: DateTime.now(),
+    ));
+    notifyListeners();
+  }
+
+  Future<void> _showLocalNotification({required int id, required String title, required String body}) async {
+    const androidDetails = AndroidNotificationDetails(
+      'nexo_channel',
+      'NEXO Notificações',
+      channelDescription: 'Notificações do NEXO',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await _localNotifications.show(id, title, body, details);
+  }
 
   Future<void> loadNotifications() async {
     try {
@@ -92,38 +158,7 @@ class NotificationService extends ChangeNotifier {
         _notifications.add(AppNotification.fromMap(item));
       }
       notifyListeners();
-    } catch (_) {
-      _loadMockNotifications();
-    }
-  }
-
-  void _loadMockNotifications() {
-    if (_notifications.isNotEmpty) return;
-
-    _notifications.addAll([
-      AppNotification(
-        id: '1',
-        title: 'Café da noite',
-        body: 'Começa em 30 minutos! Participe da conversa.',
-        type: NotificationType.event,
-        timestamp: DateTime.now().add(const Duration(minutes: 30)),
-      ),
-      AppNotification(
-        id: '2',
-        title: 'Novo evento: Festa Junina Online',
-        body: '24 de Junho, 20:00. Não perca!',
-        type: NotificationType.event,
-        timestamp: DateTime.now().add(const Duration(days: 7)),
-      ),
-      AppNotification(
-        id: '3',
-        title: 'Ana está online',
-        body: 'Sua amiga está em uma sala. Diz oi!',
-        type: NotificationType.friend,
-        timestamp: DateTime.now(),
-      ),
-    ]);
-    notifyListeners();
+    } catch (_) {}
   }
 
   Future<void> markAsRead(String id) async {

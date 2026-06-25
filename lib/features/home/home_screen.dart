@@ -10,6 +10,8 @@ import '../profile/profile_screen.dart';
 import '../movies/group_movies_screen.dart';
 import '../notifications/notification_service.dart';
 import '../notifications/notifications_screen.dart';
+import '../rooms/rooms_provider.dart';
+import '../events/events_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,6 +66,7 @@ class _HomeContentState extends State<HomeContent> {
   List<dynamic> _liveRooms = [];
   List<dynamic> _events = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -72,20 +75,25 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   Future<void> _loadData() async {
+    setState(() { _loading = true; _error = null; });
     try {
-      final results = await Future.wait([
-        _api.get('/api/rooms?live=true'),
-        _api.get('/api/events'),
+      final roomsProvider = context.read<RoomsProvider>();
+      final eventsProvider = context.read<EventsProvider>();
+
+      await Future.wait([
+        roomsProvider.loadRooms(liveOnly: true),
+        eventsProvider.loadEvents(),
       ]);
+
       if (mounted) {
         setState(() {
-          _liveRooms = results[0] is List ? results[0] : [];
-          _events = results[1] is List ? results[1] : [];
+          _liveRooms = roomsProvider.rooms;
+          _events = eventsProvider.events;
           _loading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = 'Erro ao carregar dados'; });
     }
   }
 
@@ -106,7 +114,23 @@ class _HomeContentState extends State<HomeContent> {
     return SafeArea(
       child: _loading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A7C6F)))
-          : RefreshIndicator(
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+                      const SizedBox(height: 12),
+                      Text(_error!, style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _loadData,
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
               onRefresh: _loadData,
               child: CustomScrollView(
                 slivers: [

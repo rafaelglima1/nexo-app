@@ -9,6 +9,9 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/auth/presentation/auth_provider.dart';
 import 'features/auth/presentation/splash_screen.dart';
 import 'features/notifications/notification_service.dart';
+import 'features/rooms/rooms_provider.dart';
+import 'features/communities/communities_provider.dart';
+import 'features/events/events_provider.dart';
 
 late final AuthRepository authRepo;
 late final NotificationService notificationService;
@@ -18,6 +21,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
+
+  apiClient = ApiClient();
+  await apiClient.init();
 
   final supabaseUrl = AppConstants.supabaseUrl;
   final supabaseKey = AppConstants.supabaseAnonKey;
@@ -31,9 +37,9 @@ Future<void> main() async {
     publishableKey: supabaseKey,
   );
 
-  apiClient = ApiClient();
   authRepo = AuthRepository(Supabase.instance.client, apiClient);
   notificationService = NotificationService();
+  await notificationService.init();
 
   runApp(const NexoApp());
 }
@@ -47,6 +53,9 @@ class NexoApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider(authRepo)),
         ChangeNotifierProvider(create: (_) => notificationService),
+        ChangeNotifierProvider(create: (_) => RoomsProvider()),
+        ChangeNotifierProvider(create: (_) => CommunitiesProvider()),
+        ChangeNotifierProvider(create: (_) => EventsProvider()),
       ],
       child: MaterialApp(
         title: AppConstants.appName,

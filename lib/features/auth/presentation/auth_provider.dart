@@ -131,6 +131,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteAccount() async {
+    _setLoading(true);
+    try {
+      await _repository.deleteAccount();
+      _status = AuthStatus.unauthenticated;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Erro ao excluir conta.';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();

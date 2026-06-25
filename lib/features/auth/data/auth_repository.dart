@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/api/api_client.dart';
 
@@ -11,7 +12,7 @@ class AuthRepository {
 
   Stream<AuthState> get authStateChanges => _supabaseClient.auth.onAuthStateChange;
 
-  String? get accessToken => _apiClient.isAuthenticated ? null : null;
+  bool get isAuthenticated => _apiClient.isAuthenticated;
 
   Future<void> signUpWithEmail({
     required String email,
@@ -24,7 +25,7 @@ class AuthRepository {
       'name': name,
     });
 
-    _apiClient.setTokens(
+    await _apiClient.setTokens(
       accessToken: response['accessToken'],
       refreshToken: response['refreshToken'],
     );
@@ -39,28 +40,55 @@ class AuthRepository {
       'password': password,
     });
 
-    _apiClient.setTokens(
+    await _apiClient.setTokens(
       accessToken: response['accessToken'],
       refreshToken: response['refreshToken'],
     );
   }
 
   Future<void> signInWithGoogle() async {
-    await _supabaseClient.auth.signInWithOAuth(
+    final response = await _supabaseClient.auth.signInWithOAuth(
       OAuthProvider.google,
       redirectTo: 'io.supabase.nexo://login-callback/',
     );
+    await _syncWithServer();
   }
 
   Future<void> signInWithApple() async {
-    await _supabaseClient.auth.signInWithOAuth(
+    final response = await _supabaseClient.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: 'io.supabase.nexo://login-callback/',
     );
+    await _syncWithServer();
+  }
+
+  Future<void> _syncWithServer() async {
+    final user = _supabaseClient.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      await _apiClient.post('/api/auth/register', body: {
+        'email': user.email ?? '',
+        'password': user.id,
+        'name': user.userMetadata?['full_name'] ?? user.email?.split('@').first ?? '',
+      });
+    } catch (_) {}
+
+    try {
+      final response = await _apiClient.post('/api/auth/login', body: {
+        'email': user.email ?? '',
+        'password': user.id,
+      });
+
+      await _apiClient.setTokens(
+        accessToken: response['accessToken'],
+        refreshToken: response['refreshToken'],
+      );
+    } catch (_) {}
   }
 
   Future<void> signOut() async {
-    _apiClient.clearTokens();
+    await _apiClient.clearTokens();
     await _supabaseClient.auth.signOut();
   }
 
@@ -75,5 +103,13 @@ class AuthRepository {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<void> deleteAccount() async {
+    if (!_apiClient.isAuthenticated) return;
+    try {
+      await _apiClient.delete('/api/users/me');
+    } catch (_) {}
+    await signOut();
   }
 }

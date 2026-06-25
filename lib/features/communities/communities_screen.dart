@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/api/api_client.dart';
 import 'community_detail_screen.dart';
 import 'create_community_screen.dart';
+import 'communities_provider.dart';
 
 class CommunitiesScreen extends StatefulWidget {
   const CommunitiesScreen({super.key});
@@ -11,89 +13,93 @@ class CommunitiesScreen extends StatefulWidget {
 }
 
 class _CommunitiesScreenState extends State<CommunitiesScreen> {
-  final ApiClient _api = ApiClient();
-  List<dynamic> _communities = [];
-  bool _loading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadCommunities();
-  }
-
-  Future<void> _loadCommunities() async {
-    try {
-      final data = await _api.get('/api/communities');
-      if (mounted) {
-        setState(() {
-          _communities = data is List ? data : [];
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CommunitiesProvider>().loadCommunities();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateCommunityScreen())),
-        backgroundColor: const Color(0xFF4A7C6F),
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Criar comunidade'),
-      ),
-      body: SafeArea(
-      child: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A7C6F)))
-          : RefreshIndicator(
-              onRefresh: _loadCommunities,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Comunidades', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    const Text('Encontre pessoas com interesses em comum.', style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 16),
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Buscar comunidades...',
-                        prefixIcon: const Icon(Icons.search),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+    return Consumer<CommunitiesProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateCommunityScreen())),
+            backgroundColor: const Color(0xFF4A7C6F),
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add),
+            label: const Text('Criar comunidade'),
+          ),
+          body: SafeArea(
+            child: provider.loading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF4A7C6F)))
+                : provider.error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+                            const SizedBox(height: 12),
+                            Text(provider.error!, style: const TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () => provider.loadCommunities(),
+                              child: const Text('Tentar novamente'),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    if (_communities.isEmpty)
-                      const Center(child: Text('Nenhuma comunidade ainda', style: TextStyle(color: Colors.grey)))
-                    else
-                      ..._communities.map((c) => _CommunityCard(
-                            name: c['name'] ?? '',
-                            description: c['description'] ?? '',
-                            members: c['member_count'] ?? 0,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CommunityDetailScreen(
-                                  communityId: c['id'],
-                                  name: c['name'] ?? '',
+                      )
+                    : RefreshIndicator(
+                        onRefresh: () => provider.loadCommunities(),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Comunidades', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              const Text('Encontre pessoas com interesses em comum.', style: TextStyle(color: Colors.grey)),
+                              const SizedBox(height: 16),
+                              TextField(
+                                decoration: InputDecoration(
+                                  hintText: 'Buscar comunidades...',
+                                  prefixIcon: const Icon(Icons.search),
+                                  filled: true,
+                                  fillColor: Colors.grey.shade100,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
                                 ),
                               ),
-                            ),
-                          )),
-                  ],
-                ),
-              ),
-            ),
-      ),
+                              const SizedBox(height: 24),
+                              if (provider.communities.isEmpty)
+                                const Center(child: Text('Nenhuma comunidade ainda', style: TextStyle(color: Colors.grey)))
+                              else
+                                ...provider.communities.map((c) => _CommunityCard(
+                                      name: c['name'] ?? '',
+                                      description: c['description'] ?? '',
+                                      members: c['member_count'] ?? 0,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => CommunityDetailScreen(
+                                            communityId: c['id'],
+                                            name: c['name'] ?? '',
+                                          ),
+                                        ),
+                                      ),
+                                    )),
+                            ],
+                          ),
+                        ),
+                      ),
+          ),
+        );
+      },
     );
   }
 }
